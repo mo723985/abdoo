@@ -382,3 +382,33 @@ button {
         font-size: 0.95rem;
     }
 }
+/* ================== POS Select Bigger ================== */
+#pos-client-select,
+#pos-product-select,
+#pos-qty {
+    height: 55px;
+    font-size: 1.1rem;
+    padding: 10px 14px;
+    border-radius: 10px;
+}
+
+/* زر الإضافة */
+.pos-header button {
+    height: 55px;
+    font-size: 1.05rem;
+    padding: 0 20px;
+    border-radius: 10px;
+}
+
+/* ترتيب اختيار العميل */
+.pos-header {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* صف اختيار المنتج */
+.product-picker {
+    display: flex;
+    gap: 10px;
+}
