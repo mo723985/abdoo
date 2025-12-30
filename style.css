@@ -54,6 +54,8 @@ body {
     list-style: none;
     padding: 0;
     margin: 0;
+    position: fixed;
+
 }
 
 .sidebar li {
@@ -412,3 +414,4 @@ button {
     display: flex;
     gap: 10px;
 }
+
