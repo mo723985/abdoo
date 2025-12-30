@@ -32,7 +32,7 @@ body {
 
 /* ================== Sidebar ================== */
 .sidebar {
-    width: 240px;
+    width: 100%;
     background: linear-gradient(180deg, #0f172a, #020617);
     color: white;
     padding: 25px 15px;
@@ -414,4 +414,5 @@ button {
     display: flex;
     gap: 10px;
 }
+
 
