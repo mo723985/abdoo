@@ -219,60 +219,166 @@ function printInvoice(invoiceId) {
 
     const client = state.clients.find(c => c.id === invoice.clientId);
 
+    const totalPaid = invoice.payments.reduce((s, p) => s + p.amount, 0);
+    const remaining = invoice.total - totalPaid;
+
     let html = `
     <html lang="ar" dir="rtl">
     <head>
         <title>فاتورة ${invoice.id}</title>
         <style>
-            body { font-family: Arial; padding:20px }
-            table { width:100%; border-collapse: collapse }
-            th, td { border:1px solid #000; padding:8px; text-align:center }
-            h2,h3 { text-align:center }
+            body {
+                font-family: Arial;
+                padding: 25px;
+                background: #f8fafc;
+            }
+
+            .invoice-box {
+                background: white;
+                border: 2px dashed #2563eb;
+                padding: 20px;
+                max-width: 800px;
+                margin: auto;
+            }
+
+            h2 {
+                text-align: center;
+                margin: 5px 0;
+            }
+
+            h3 {
+                text-align: center;
+                margin: 5px 0;
+                color: #2563eb;
+                font-size: 34px;
+            }
+
+            .shop-phone {
+                text-align: center;
+                font-size: 14px;
+                margin-bottom: 10px;
+            }
+
+            .info {
+                display: flex;
+                justify-content: space-between;
+                margin: 15px 0;
+                font-size: 14px;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+            }
+
+            th {
+                background: #f1f5f9;
+            }
+
+            th, td {
+                border: 1px solid #000;
+                padding: 8px;
+                text-align: center;
+            }
+
+            .summary {
+                margin-top: 15px;
+                font-size: 25px;
+                border-top: 2px solid #000;
+                padding-top: 10px;
+            }
+
+            .summary div {
+                margin: 6px 0;
+                display: flex;
+                justify-content: space-between;
+            }
+
+            .paid {
+                color: #16a34a;
+                font-weight: bold;
+                font-size: 25px;
+            }
+
+            .remain {
+                color: #dc2626;
+                font-weight: bold;
+                font-size: 25px;
+            }
+
+            .footer {
+                margin-top: 20px;
+                text-align: center;
+                font-size: 13px;
+                color: #555;
+            }
         </style>
     </head>
     <body>
 
-    <h2>فاتورة بيع</h2>
-    <h3>الحاج محمد عبدالعاطي وأولاده</h3>
-    <p><strong>العميل:</strong> ${client?.name || ''}</p>
-    <p><strong>التاريخ:</strong> ${new Date(invoice.date).toLocaleDateString('ar-EG')}</p>
+    <div class="invoice-box">
 
-    <table>
-        <thead>
-            <tr>
-                <th>الصنف</th>
-                <th>السعر</th>
-                <th>الكمية</th>
-                <th>الإجمالي</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${invoice.items.map(i => `
+        <h2>فاتورة بيع</h2>
+        <h3>الحاج محمد عبدالعاطي وأولاده</h3>
+        <div class="shop-phone">📞 01203089081</div>
+
+        <div class="info">
+            <div><strong>العميل:</strong> ${client?.name || ''}</div>
+            <div><strong>التاريخ:</strong> ${new Date(invoice.date).toLocaleDateString('ar-EG')}</div>
+        </div>
+
+        <table>
+            <thead>
                 <tr>
-                    <td>${i.name}</td>
-                    <td>${i.price}</td>
-                    <td>${i.qty}</td>
-                    <td>${i.total}</td>
+                    <th>الصنف</th>
+                    <th>السعر</th>
+                    <th>الكمية</th>
+                    <th>الإجمالي</th>
                 </tr>
-            `).join('')}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                ${invoice.items.map(i => `
+                    <tr>
+                        <td>${i.name}</td>
+                        <td>${i.price}</td>
+                        <td>${i.qty}</td>
+                        <td>${i.total}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
 
-    <h3>الإجمالي: ${invoice.total} ج.م</h3>
+        <div class="summary">
+            <div>
+                <span>إجمالي الفاتورة</span>
+                <strong>${invoice.total} ج.م</strong>
+            </div>
+            <div class="paid">
+                <span>المدفوع</span>
+                <span>${totalPaid} ج.م</span>
+            </div>
+            <div class="remain">
+                <span>المتبقي</span>
+                <span>${remaining} ج.م</span>
+            </div>
+        </div>
+
+        <div class="footer">
+            شكراً لتشريفكم – نتشرف بخدمتكم دائماً 🌹
+        </div>
+
+    </div>
 
     </body>
     </html>
     `;
 
-    const win = window.open('', '', 'width=800,height=600');
+    const win = window.open('', '', 'width=900,height=700');
     win.document.write(html);
     win.document.close();
     win.print();
 }
-
-
-
-
 
 
 
@@ -436,9 +542,11 @@ renderInvoices() {
             <td>${new Date(inv.date).toLocaleDateString('ar-EG')}</td>
             <td>${inv.total.toFixed(2)} ج.م</td>
             <td>
-                <button onclick="printInvoice('${inv.id}')">
-                    طباعة
-                </button>
+<td>
+    <button onclick="printInvoice('${inv.id}')">طباعة</button>
+    <button onclick="sendInvoice('${inv.id}')">إرسال</button>
+</td>
+
             </td>
         </tr>
         `;
@@ -461,6 +569,58 @@ renderInvoices() {
 
 
 
+function sendInvoice(invoiceId) {
+    const invoice = state.invoices.find(inv => inv.id === invoiceId);
+    if (!invoice) return alert("الفاتورة غير موجودة");
+
+    const client = state.clients.find(c => c.id === invoice.clientId);
+    if (!client || !client.phone) {
+        return alert("لا يوجد رقم واتساب لهذا العميل");
+    }
+
+    const paid = invoice.payments.reduce((s, p) => s + p.amount, 0);
+    const remaining = invoice.total - paid;
+
+let message = `
+ فاتورة بيع رسمية
+
+ الحاج محمد عبدالعاطي وأولاده
+   01203089081
+━━━━━━━━━━━━━━━━━━
+
+  اسم العميل:  ${client.name}
+  التاريخ:  ${new Date(invoice.date).toLocaleDateString('ar-EG')}
+
+  تفاصيل الأصناف: 
+`;
+
+invoice.items.forEach((i, index) => {
+    message += `
+${index + 1}- ${i.name}
+   • الكمية: ${i.qty}
+   • السعر: ${i.price} ج.م
+   • الإجمالي: ${i.total} ج.م
+`;
+});
+
+message += `
+━━━━━━━━━━━━━━━━━━
+  ملخص الحساب: 
+• إجمالي الفاتورة: ${invoice.total} ج.م
+• المبلغ المدفوع: ${paid} ج.م
+• المبلغ المتبقي: ${remaining} ج.م
+
+━━━━━━━━━━━━━━━━━━
+ نشكركم على التعامل معنا
+ في انتظار خدمتكم دائمًا
+`;
+
+
+    const phone = client.phone.replace(/\D/g, '');
+    const url = `https://wa.me/20${phone}?text=${encodeURIComponent(message)}`;
+
+    window.open(url, '_blank');
+}
 
 
 
