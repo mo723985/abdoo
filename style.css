@@ -36,7 +36,7 @@ body {
     background: linear-gradient(180deg, #0f172a, #020617);
     color: white;
     padding: 25px 15px;
-    position: fixed;
+   
     height: 100%;
     box-shadow: -2px 0 10px rgba(0,0,0,0.2);
 }
@@ -414,6 +414,7 @@ button {
     display: flex;
     gap: 10px;
 }
+
 
 
 
