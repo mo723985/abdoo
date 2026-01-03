@@ -3,201 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام المحترف - إدارة الأدوات الصحية</title>
+    <title>نظام إدارة الأدوات الصحية Pro</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-
     <div class="app-container">
-        <nav class="sidebar no-print">
-            <div class="logo"><h2>المحترف للإدارة</h2></div>
-            <ul>
-                <li onclick="routing.navigate('dashboard')" id="nav-dashboard" class="active"><i class="fas fa-home"></i> الرئيسية</li>
-                <li onclick="routing.navigate('products')" id="nav-products"><i class="fas fa-box"></i> المنتجات</li>
-                <li onclick="routing.navigate('clients')" id="nav-clients"><i class="fas fa-users"></i> العملاء</li>
-                <li onclick="routing.navigate('pos')" id="nav-pos"><i class="fas fa-cart-plus"></i> فاتورة بيع</li>
-                <li id="nav-invoices" onclick="routing.navigate('invoices')"> الفواتير السابق</li>
-                <li onclick="routing.navigate('debts')" id="nav-debts"><i class="fas fa-money-bill-wave"></i> المديونيات</li>
-                <li onclick="routing.navigate('reports')" id="nav-reports"><i class="fas fa-chart-pie"></i> التقارير</li>
-                <li onclick="routing.navigate('settings')" id="nav-settings"><i class="fas fa-database"></i> البيانات</li>
-           
-            </ul>
-        </nav>
+        <aside class="sidebar">
+            <div class="logo"><h2>برو سباك</h2></div>
+            <nav id="main-nav">
+                <button class="nav-btn" data-tab="dashboard">📊 اللوحة الرئيسية</button>
+                <button class="nav-btn" data-tab="products">📦 المخزن والمنتجات</button>
+                <button class="nav-btn" data-tab="sales">🧾 فواتير المبيعات</button>
+                <button class="nav-btn" data-tab="purchases">🛒 فواتير المشتريات</button>
+                <button class="nav-btn" data-tab="suppliers">👨‍🔧 الموردين</button>
+                <button class="nav-btn" data-tab="clients">👤 العملاء</button>
+                <button class="nav-btn" data-tab="expenses">💰 المصروفات</button>
+                <button class="nav-btn" data-tab="reports">📈 التقارير المالية</button>
+                <button class="nav-btn" data-tab="settings">⚙️ الإعدادات</button>
+            </nav>
+        </aside>
 
-        <main class="content">
-            <section id="dashboard" class="page-section active">
-                <div class="stats-grid">
-                    <div class="stat-card"><h3>إجمالي المبيعات</h3><p id="dash-sales">0</p></div>
-                    <div class="stat-card"><h3>إجمالي المحصل</h3><p id="dash-paid">0</p></div>
-                    <div class="stat-card danger"><h3>إجمالي الديون</h3><p id="dash-debts">0</p></div>
-                </div>
-            </section>
-
-
-
-
-<section id="invoices" class="page-section">
-    <h2>كل الفواتير</h2>
-
-    <table>
-        <thead>
-            <tr>
-                <th>رقم الفاتورة</th>
-                <th>العميل</th>
-                <th>التاريخ</th>
-                <th>الإجمالي</th>
-                <th>إجراء</th>
-            </tr>
-        </thead>
-        <tbody id="invoices-table-body"></tbody>
-    </table>
-</section>
-
-
-
-
-
-
-
-            <section id="products" class="page-section">
-                <div class="header-actions">
-                    <h2>قائمة الأصناف</h2>
-                    <button class="btn-primary" onclick="ui.openModal('productModal')">إضافة صنف جديد +</button>
-                </div>
-                <table>
-                    <thead>
-                        <tr><th>الاسم</th><th>التصنيف</th><th>السعر</th><th>المخزون</th><th>العمليات</th></tr>
-                    </thead>
-                    <tbody id="products-table-body"></tbody>
-                </table>
-            </section>
-
-            <section id="clients" class="page-section">
-                <div class="header-actions">
-                    <h2>سجل العملاء</h2>
-                    <button class="btn-primary" onclick="ui.openModal('clientModal')">إضافة عميل +</button>
-                </div>
-                <table>
-                    <thead>
-                        <tr><th>الاسم</th><th>الهاتف</th><th>العنوان</th><th>العمليات</th></tr>
-                    </thead>
-                    <tbody id="clients-table-body"></tbody>
-                </table>
-            </section>
-
-            <section id="debts" class="page-section">
-                <h2>سجل مديونيات العملاء</h2>
-                <table>
-                    <thead>
-                        <tr><th>العميل</th><th>إجمالي المشتريات</th><th>إجمالي المدفوع</th><th>المتبقي</th><th>العمليات</th></tr>
-                    </thead>
-                    <tbody id="debts-table-body"></tbody>
-                </table>
-            </section>
-
-            <section id="pos" class="page-section">
-                <div class="pos-layout">
-                    <div class="pos-main">
-                        <div class="pos-header">
-                            <select id="pos-client-select"><option value="">-- اختر العميل --</option></select>
-                            <div class="product-picker">
-                                <select id="pos-product-select"></select>
-                                <input type="number" id="pos-qty" value="1" min="1">
-                                <button onclick="app.addItemToCart()">إضافة</button>
-                            </div>
-                        </div>
-                        <table class="cart-table">
-                            <thead><tr><th>الصنف</th><th>السعر</th><th>الكمية</th><th>الإجمالي</th><th></th></tr></thead>
-                            <tbody id="cart-table-body"></tbody>
-                        </table>
-                    </div>
-                    <div class="pos-side">
-                        <div class="summary-box">
-                            <div class="row"><span>الإجمالي:</span><strong id="pos-total">0.00</strong></div>
-                            <div class="row"><span>المبلغ المدفوع الآن:</span><input type="number" id="pos-paid-now" value="0"></div>
-                            <button class="btn-confirm" onclick="app.checkout()">حفظ وطباعة الفاتورة</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="reports" class="page-section">
-                <div class="report-controls">
-                    <input type="month" id="report-month-filter" onchange="ui.renderReports()">
-                    <h2>تحليل المبيعات</h2>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-card"><h3>مبيعات الشهر</h3><p id="rep-total-sales">0</p></div>
-                    <div class="stat-card"><h3>تحصيل الشهر</h3><p id="rep-total-paid">0</p></div>
-                    <div class="stat-card"><h3>فواتير الشهر</h3><p id="rep-count">0</p></div>
-                </div>
-                <div class="best-sellers">
-                    <h3>الأصناف الأكثر مبيعاً</h3>
-                    <ul id="rep-best-sellers"></ul>
-                </div>
-            </section>
-
-            <section id="settings" class="page-section">
-                <h2>النسخ الاحتياطي</h2>
-                <div class="backup-box">
-                    <button class="btn-export" onclick="app.exportData()">تصدير نسخة (JSON)</button>
-                    <hr>
-                    <input type="file" id="import-file">
-                    <button class="btn-import" onclick="app.importData()">استيراد البيانات</button>
-                </div>
-            </section>
-
-
-
-
-
+        <main class="main-content">
+            <header class="top-bar">
+                <h1 id="tab-title">اللوحة الرئيسية</h1>
+                <div id="status-indicator">✅ جميع البيانات محفوظة</div>
+            </header>
+            <section id="content-area"></section>
         </main>
     </div>
 
-    <div id="productModal" class="modal">
-        <div class="modal-content">
-            <h3 id="p-modal-title">إضافة منتج</h3>
-            <input type="hidden" id="p-id">
-            <input type="text" id="p-name" placeholder="اسم المنتج">
-            <input type="text" id="p-cat" placeholder="التصنيف">
-            <input type="number" id="p-price" placeholder="السعر">
-            <input type="number" id="p-qty" placeholder="الكمية">
-            <button class="btn-primary" onclick="app.saveProduct()">حفظ</button>
-            <button class="btn-cancel" onclick="ui.closeModal('productModal')">إلغاء</button>
+    <div id="modal-overlay" class="hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title">العنوان</h3>
+                <button onclick="UI.closeModal()" class="close-btn">&times;</button>
+            </div>
+            <div id="modal-body"></div>
         </div>
     </div>
-
-    <div id="clientModal" class="modal">
-        <div class="modal-content">
-            <h3 id="c-modal-title">إضافة عميل</h3>
-            <input type="hidden" id="c-id">
-            <input type="text" id="c-name" placeholder="الاسم">
-            <input type="text" id="c-phone" placeholder="رقم الواتساب">
-            <input type="text" id="c-address" placeholder="العنوان">
-            <button class="btn-primary" onclick="app.saveClient()">حفظ</button>
-            <button class="btn-cancel" onclick="ui.closeModal('clientModal')">إلغاء</button>
-        </div>
-    </div>
-
-    <div id="paymentModal" class="modal">
-        <div class="modal-content">
-            <h3>تسجيل دفعة جديدة</h3>
-            <p id="pay-client-name"></p>
-            <input type="hidden" id="pay-client-id">
-            <input type="number" id="pay-amount" placeholder="المبلغ">
-            <button class="btn-primary" onclick="app.recordPayment()">تأكيد الدفع</button>
-            <button class="btn-cancel" onclick="ui.closeModal('paymentModal')">إلغاء</button>
-            <hr>
-            <h4>آخر المدفوعات</h4>
-            <div id="payment-history-list"></div>
-        </div>
-    </div>
-
-    <div id="print-area" class="only-print"></div>
 
     <script src="script.js"></script>
 </body>
 </html>
-
