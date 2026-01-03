@@ -1,629 +1,440 @@
 /**
- * نظام إدارة المحل - الإصدار الاحترافي 2.0
+ * نظام إدارة محل أدوات صحية - النسخة الاحترافية الكاملة
  */
 
-// --- حالة التطبيق (Data State) ---
-let state = {
-    products: [],
-    clients: [],
-    invoices: []
-};
+// 1. Storage Manager
+const Storage = (() => {
+    const KEY = 'sanitary_pro_data';
+    return {
+        save: (data) => localStorage.setItem(KEY, JSON.stringify(data)),
+        load: () => JSON.parse(localStorage.getItem(KEY)),
+        export: (data) => {
+            const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `backup_${new Date().toLocaleDateString()}.json`;
+            a.click();
+        }
+    };
+})();
 
-// --- نظام التنقل (Routing) ---
-const routing = {
-    navigate(sectionId) {
-        document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
-        document.querySelectorAll('.sidebar li').forEach(l => l.classList.remove('active'));
-        
-        document.getElementById(sectionId).classList.add('active');
-        document.getElementById(`nav-${sectionId}`).classList.add('active');
-        
-        this.onSectionLoad(sectionId);
+// 2. State Manager
+const AppState = {
+    state: {
+        products: [],
+        purchases: [],
+        suppliers: [],
+        clients: [],
+        invoices: [],
+        expenses: [],
+        settings: { lastTab: "dashboard" }
     },
-    onSectionLoad(id) {
-        if(id === 'dashboard') ui.renderDashboard();
-        if(id === 'products') ui.renderProducts();
-        if(id === 'clients') ui.renderClients();
-        if(id === 'pos') ui.initPOS();
-        if(id === 'debts') ui.renderDebts();
-        if(id === 'reports') ui.renderReports();
-        if(id === 'invoices') ui.renderInvoices(); // ✅ الجديد
-    }
-};
+    isDirty: false,
 
-// --- المنطق البرمجي (App Logic) ---
-const app = {
     init() {
-        const data = localStorage.getItem('sanitary_ware_db');
-        if(data) state = JSON.parse(data);
-        routing.navigate('dashboard');
+        const saved = Storage.load();
+        if (saved) this.state = saved;
+        this.save();
     },
 
     save() {
-        localStorage.setItem('sanitary_ware_db', JSON.stringify(state));
+        Storage.save(this.state);
+        document.getElementById('status-indicator').innerText = '✅ جميع البيانات محفوظة';
+        this.isDirty = false;
     },
 
-    // إدارة المنتجات
-    saveProduct() {
-        const id = document.getElementById('p-id').value || Date.now().toString();
-        const product = {
-            id,
-            name: document.getElementById('p-name').value,
-            category: document.getElementById('p-cat').value,
-            price: parseFloat(document.getElementById('p-price').value) || 0,
-            qty: parseInt(document.getElementById('p-qty').value) || 0
-        };
+    markDirty() {
+        this.isDirty = true;
+        document.getElementById('status-indicator').innerText = '⚠️ بيانات غير محفوظة';
+    }
+};
 
-        if(!product.name) return alert("الاسم مطلوب");
-
-        const index = state.products.findIndex(p => p.id === id);
-        if(index > -1) state.products[index] = product;
-        else state.products.push(product);
-
-        this.save();
-        ui.closeModal('productModal');
-        ui.renderProducts();
+// 3. Products Module
+const Products = {
+    add(p) {
+        AppState.state.products.push({...p, id: Date.now(), qty: Number(p.qty)});
+        AppState.save();
     },
+    updateQty(name, amount) {
+        const p = AppState.state.products.find(x => x.name === name);
+        if (p) p.qty = Number(p.qty) + Number(amount);
+    }
+};
 
-    deleteProduct(id) {
-        if(!confirm("هل أنت متأكد من حذف هذا المنتج؟")) return;
-        state.products = state.products.filter(p => p.id !== id);
-        this.save();
-        ui.renderProducts();
+// 4. Suppliers Module
+const Suppliers = {
+    renderList() {
+        const list = AppState.state.suppliers;
+        return `
+            <button class="btn btn-primary" onclick="Suppliers.showAddForm()">+ إضافة مورد</button>
+            <table>
+                <thead><tr><th>المورد</th><th>الهاتف</th><th>العنوان</th><th>إجمالي التوريد</th><th>إجراءات</th></tr></thead>
+                <tbody>
+                    ${list.map((s, i) => {
+                        const total = AppState.state.purchases
+                            .filter(p => p.supplier === s.name)
+                            .reduce((sum, p) => sum + Number(p.total), 0);
+                        return `<tr><td>${s.name}</td><td>${s.phone}</td><td>${s.address}</td><td>${total} ج.م</td>
+                        <td><button class="btn-danger" onclick="Suppliers.delete(${i})">حذف</button></td></tr>`;
+                    }).join('')}
+                </tbody>
+            </table>`;
     },
-
-    // إدارة العملاء
-    saveClient() {
-        const id = document.getElementById('c-id').value || Date.now().toString();
-        const client = {
-            id,
-            name: document.getElementById('c-name').value,
-            phone: document.getElementById('c-phone').value,
-            address: document.getElementById('c-address').value
-        };
-
-        const index = state.clients.findIndex(c => c.id === id);
-        if(index > -1) state.clients[index] = client;
-        else state.clients.push(client);
-
-        this.save();
-        ui.closeModal('clientModal');
-        ui.renderClients();
+    showAddForm() {
+        UI.showModal("إضافة مورد جديد", `
+            <form id="supplier-form" onsubmit="Suppliers.handleSave(event)">
+                <div class="form-group"><label>اسم المورد</label><input id="s_name" required></div>
+                <div class="form-group"><label>الهاتف</label><input id="s_phone"></div>
+                <div class="form-group"><label>العنوان</label><input id="s_address"></div>
+                <button class="btn btn-primary">حفظ</button>
+            </form>`);
     },
-
-    deleteClient(id) {
-        if(!confirm("سيتم حذف العميل وكافة سجلاته، متأكد؟")) return;
-        state.clients = state.clients.filter(c => c.id !== id);
-        state.invoices = state.invoices.filter(inv => inv.clientId !== id);
-        this.save();
-        ui.renderClients();
-    },
-
-    // البيع والفواتير
-    cart: [],
-    addItemToCart() {
-        const pId = document.getElementById('pos-product-select').value;
-        const qty = parseInt(document.getElementById('pos-qty').value) || 1;
-        const product = state.products.find(p => p.id === pId);
-
-        if(!product || qty > product.qty) return alert("الكمية غير متاحة");
-
-        this.cart.push({
-            productId: pId,
-            name: product.name,
-            price: product.price,
-            qty: qty,
-            total: product.price * qty
+    handleSave(e) {
+        e.preventDefault();
+        AppState.state.suppliers.push({
+            name: document.getElementById('s_name').value,
+            phone: document.getElementById('s_phone').value,
+            address: document.getElementById('s_address').value
         });
-        ui.renderCart();
+        AppState.save(); UI.closeModal(); UI.renderTab('suppliers');
     },
+    delete(i) { if(confirm('حذف المورد؟')) { AppState.state.suppliers.splice(i,1); AppState.save(); UI.renderTab('suppliers'); } }
+};
 
-
-
-
-
-
-
-
-
-
-    
-    checkout() {
-        const clientId = document.getElementById('pos-client-select').value;
-        const paidNow = parseFloat(document.getElementById('pos-paid-now').value) || 0;
-        const total = this.cart.reduce((s, i) => s + i.total, 0);
-
-        if(!clientId || this.cart.length === 0) return alert("أكمل بيانات الفاتورة");
-
+// 5. Purchases Module (المشتريات - زيادة المخزون)
+const Purchases = {
+    tempItems: [],
+    showForm() {
+        this.tempItems = [];
+        AppState.markDirty();
+        UI.showModal("فاتورة شراء جديدة", `
+            <div class="form-group">
+                <label>المورد</label>
+                <select id="pur_supplier">
+                    ${AppState.state.suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+                </select>
+            </div>
+            <div style="background: #f1f5f9; padding: 10px; border-radius: 8px;">
+                <div class="form-group"><label>المنتج</label>
+                    <input type="text" id="pur_prod_name" list="prod-list" placeholder="اختر أو اكتب اسم منتج جديد">
+                    <datalist id="prod-list">${AppState.state.products.map(p => `<option value="${p.name}">`).join('')}</datalist>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+                    <div class="form-group"><label>الكمية</label><input type="number" id="pur_qty"></div>
+                    <div class="form-group"><label>سعر الشراء</label><input type="number" id="pur_cost"></div>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="Purchases.addItem()">إضافة للصنف</button>
+            </div>
+            <table id="pur-temp-table" style="margin-top:10px">
+                <thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <div class="form-group"><label>مصاريف إضافية (نقل/تحميل)</label><input type="number" id="pur_extra" value="0"></div>
+            <button class="btn btn-primary" style="width:100%" onclick="Purchases.saveInvoice()">حفظ فاتورة الشراء وتحديث المخزن</button>
+        `);
+    },
+    addItem() {
+        const name = document.getElementById('pur_prod_name').value;
+        const qty = Number(document.getElementById('pur_qty').value);
+        const cost = Number(document.getElementById('pur_cost').value);
+        if(!name || !qty) return;
+        this.tempItems.push({name, qty, cost});
+        this.renderTemp();
+    },
+    renderTemp() {
+        const body = document.querySelector('#pur-temp-table tbody');
+        body.innerHTML = this.tempItems.map(it => `<tr><td>${it.name}</td><td>${it.qty}</td><td>${it.cost}</td></tr>`).join('');
+    },
+    saveInvoice() {
+        if(this.tempItems.length === 0) return;
+        const extra = Number(document.getElementById('pur_extra').value);
+        const subTotal = this.tempItems.reduce((s, i) => s + (i.qty * i.cost), 0);
+        
         const invoice = {
-            id: 'INV-' + Date.now(),
-            clientId,
-            items: [...this.cart],
-            total: total,
-            payments: [{
-                amount: paidNow,
-                date: new Date().toISOString().split('T')[0],
-                time: new Date().toLocaleTimeString('ar-EG')
-            }],
-            date: new Date().toISOString()
+            id: Date.now(),
+            supplier: document.getElementById('pur_supplier').value,
+            items: [...this.tempItems],
+            extraCosts: extra,
+            total: subTotal + extra,
+            date: new Date().toLocaleDateString()
         };
 
         // تحديث المخزن
-// خصم المخزون
-this.cart.forEach(item => {
-    const p = state.products.find(prod => prod.id === item.productId);
-    if (p) p.qty -= item.qty;
-});
-
-// حفظ الفاتورة
-state.invoices.push(invoice);
-this.save();
-
-// طباعة مباشرة
-printInvoice(invoice.id);
-
-// تفريغ الكارت
-this.cart = [];
-
-routing.navigate('dashboard');
-
-
-    },
-
-    // نظام المديونيات المتطور
-    recordPayment() {
-        const clientId = document.getElementById('pay-client-id').value;
-        const amount = parseFloat(document.getElementById('pay-amount').value);
-
-        if(!amount || amount <= 0) return;
-
-        // إيجاد الفواتير التي بها متبقي لهذا العميل
-        let remainingToPay = amount;
-        state.invoices.forEach(inv => {
-            if(inv.clientId === clientId && remainingToPay > 0) {
-                const invPaid = inv.payments.reduce((s, p) => s + p.amount, 0);
-                const invDebt = inv.total - invPaid;
-                
-                if(invDebt > 0) {
-                    const pay = Math.min(invDebt, remainingToPay);
-                    inv.payments.push({
-                        amount: pay,
-                        date: new Date().toISOString().split('T')[0],
-                        time: new Date().toLocaleTimeString('ar-EG')
-                    });
-                    remainingToPay -= pay;
-                }
+        this.tempItems.forEach(item => {
+            let p = AppState.state.products.find(x => x.name === item.name);
+            if(p) {
+                p.qty += item.qty;
+                p.buyPrice = item.cost; // تحديث آخر سعر شراء
+            } else {
+                Products.add({name: item.name, category: 'عام', buyPrice: item.cost, sellPrice: item.cost * 1.2, qty: item.qty, minQty: 5});
             }
         });
 
-        this.save();
-        ui.closeModal('paymentModal');
-        ui.renderDebts();
+        AppState.state.purchases.push(invoice);
+        AppState.save(); UI.closeModal(); UI.renderTab('purchases');
     }
 };
 
-
-
-
-
-
-
-
-
-
-
-
-function printInvoice(invoiceId) {
-    const invoice = state.invoices.find(inv => inv.id === invoiceId);
-    if (!invoice) return alert("الفاتورة غير موجودة");
-
-    const client = state.clients.find(c => c.id === invoice.clientId);
-
-    const totalPaid = invoice.payments.reduce((s, p) => s + p.amount, 0);
-    const remaining = invoice.total - totalPaid;
-
-    let html = `
-    <html lang="ar" dir="rtl">
-    <head>
-        <title>فاتورة ${invoice.id}</title>
-        <style>
-            body {
-                font-family: Arial;
-                padding: 25px;
-                background: #f8fafc;
-            }
-
-            .invoice-box {
-                background: white;
-                border: 2px dashed #2563eb;
-                padding: 20px;
-                max-width: 800px;
-                margin: auto;
-            }
-
-            h2 {
-                text-align: center;
-                margin: 5px 0;
-            }
-
-            h3 {
-                text-align: center;
-                margin: 5px 0;
-                color: #2563eb;
-                font-size: 34px;
-            }
-
-            .shop-phone {
-                text-align: center;
-                font-size: 14px;
-                margin-bottom: 10px;
-            }
-
-            .info {
-                display: flex;
-                justify-content: space-between;
-                margin: 15px 0;
-                font-size: 14px;
-            }
-
-            table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-top: 10px;
-            }
-
-            th {
-                background: #f1f5f9;
-            }
-
-            th, td {
-                border: 1px solid #000;
-                padding: 8px;
-                text-align: center;
-            }
-
-            .summary {
-                margin-top: 15px;
-                font-size: 25px;
-                border-top: 2px solid #000;
-                padding-top: 10px;
-            }
-
-            .summary div {
-                margin: 6px 0;
-                display: flex;
-                justify-content: space-between;
-            }
-
-            .paid {
-                color: #16a34a;
-                font-weight: bold;
-                font-size: 25px;
-            }
-
-            .remain {
-                color: #dc2626;
-                font-weight: bold;
-                font-size: 25px;
-            }
-
-            .footer {
-                margin-top: 20px;
-                text-align: center;
-                font-size: 13px;
-                color: #555;
-            }
-        </style>
-    </head>
-    <body>
-
-    <div class="invoice-box">
-
-        <h2>فاتورة بيع</h2>
-        <h3>الحاج محمد عبدالعاطي وأولاده</h3>
-        <div class="shop-phone">📞 01203089081</div>
-
-        <div class="info">
-            <div><strong>العميل:</strong> ${client?.name || ''}</div>
-            <div><strong>التاريخ:</strong> ${new Date(invoice.date).toLocaleDateString('ar-EG')}</div>
-        </div>
-
-        <table>
-            <thead>
-                <tr>
-                    <th>الصنف</th>
-                    <th>السعر</th>
-                    <th>الكمية</th>
-                    <th>الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${invoice.items.map(i => `
-                    <tr>
-                        <td>${i.name}</td>
-                        <td>${i.price}</td>
-                        <td>${i.qty}</td>
-                        <td>${i.total}</td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-
-        <div class="summary">
-            <div>
-                <span>إجمالي الفاتورة</span>
-                <strong>${invoice.total} ج.م</strong>
+// 6. Sales Module (المبيعات - خصم المخزون)
+const Sales = {
+    tempItems: [],
+    showForm() {
+        this.tempItems = [];
+        UI.showModal("فاتورة بيع", `
+            <div class="form-group"><label>العميل</label>
+                <select id="sal_client">${AppState.state.clients.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}</select>
             </div>
-            <div class="paid">
-                <span>المدفوع</span>
-                <span>${totalPaid} ج.م</span>
+            <div class="form-group"><label>المنتج</label>
+                <select id="sal_prod">${AppState.state.products.map(p => `<option value="${p.name}">${p.name} (المتاح: ${p.qty})</option>`).join('')}</select>
             </div>
-            <div class="remain">
-                <span>المتبقي</span>
-                <span>${remaining} ج.م</span>
-            </div>
-        </div>
-
-        <div class="footer">
-            شكراً لتشريفكم – نتشرف بخدمتكم دائماً 🌹
-        </div>
-
-    </div>
-
-    </body>
-    </html>
-    `;
-
-    const win = window.open('', '', 'width=900,height=700');
-    win.document.write(html);
-    win.document.close();
-    win.print();
-}
-
-
-
-
-
-// --- واجهة المستخدم (UI Renderers) ---
-const ui = {
-    renderProducts() {
-        const body = document.getElementById('products-table-body');
-        body.innerHTML = state.products.map(p => `
-            <tr>
-                <td>${p.name}</td>
-                <td>${p.category}</td>
-                <td>${p.price}</td>
-                <td>${p.qty}</td>
-                <td>
-                    <button class="btn-edit" onclick="ui.editProduct('${p.id}')">تعديل</button>
-                    <button class="btn-delete" onclick="app.deleteProduct('${p.id}')">حذف</button>
-                </td>
-            </tr>
-        `).join('');
+            <div class="form-group"><label>الكمية</label><input type="number" id="sal_qty"></div>
+            <button class="btn btn-primary" onclick="Sales.addItem()">إضافة</button>
+            <table id="sal-temp-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th></tr></thead><tbody></tbody></table>
+            <button class="btn btn-primary" onclick="Sales.saveInvoice()">إصدار الفاتورة</button>
+        `);
     },
-
-    editProduct(id) {
-        const p = state.products.find(x => x.id === id);
-        document.getElementById('p-id').value = p.id;
-        document.getElementById('p-name').value = p.name;
-        document.getElementById('p-cat').value = p.category;
-        document.getElementById('p-price').value = p.price;
-        document.getElementById('p-qty').value = p.qty;
-        this.openModal('productModal');
+    addItem() {
+        const name = document.getElementById('sal_prod').value;
+        const qty = Number(document.getElementById('sal_qty').value);
+        const p = AppState.state.products.find(x => x.name === name);
+        if(!p || p.qty < qty) return alert('الكمية غير كافية!');
+        this.tempItems.push({name, qty, price: p.sellPrice, buyPrice: p.buyPrice});
+        this.renderTemp();
     },
-
-    renderClients() {
-        const body = document.getElementById('clients-table-body');
-        body.innerHTML = state.clients.map(c => `
-            <tr>
-                <td>${c.name}</td>
-                <td>${c.phone}</td>
-                <td>${c.address}</td>
-                <td>
-                    <button onclick="ui.editClient('${c.id}')">تعديل</button>
-                    <button onclick="app.deleteClient('${c.id}')" style="color:red">حذف</button>
-                </td>
-            </tr>
-        `).join('');
+    renderTemp() {
+        const body = document.querySelector('#sal-temp-table tbody');
+        body.innerHTML = this.tempItems.map(it => `<tr><td>${it.name}</td><td>${it.qty}</td><td>${it.price}</td></tr>`).join('');
     },
-
-    editClient(id) {
-        const c = state.clients.find(x => x.id === id);
-        document.getElementById('c-id').value = c.id;
-        document.getElementById('c-name').value = c.name;
-        document.getElementById('c-phone').value = c.phone;
-        document.getElementById('c-address').value = c.address;
-        this.openModal('clientModal');
-    },
-
-    initPOS() {
-        const cSel = document.getElementById('pos-client-select');
-        const pSel = document.getElementById('pos-product-select');
-        
-        cSel.innerHTML = '<option value="">-- اختر العميل --</option>' + 
-            state.clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-        
-        pSel.innerHTML = state.products.map(p => `<option value="${p.id}">${p.name} (${p.price} ج.م)</option>`).join('');
-    },
-
-    renderCart() {
-        const body = document.getElementById('cart-table-body');
-        let total = 0;
-        body.innerHTML = app.cart.map((item, idx) => {
-            total += item.total;
-            return `<tr><td>${item.name}</td><td>${item.price}</td><td>${item.qty}</td><td>${item.total}</td><td><button onclick="app.cart.splice(${idx},1);ui.renderCart()">X</button></td></tr>`
-        }).join('');
-        document.getElementById('pos-total').innerText = total.toFixed(2);
-    },
-
-    renderDebts() {
-        const body = document.getElementById('debts-table-body');
-        body.innerHTML = state.clients.map(c => {
-            const cInvoices = state.invoices.filter(i => i.clientId === c.id);
-            const totalPurchased = cInvoices.reduce((s, i) => s + i.total, 0);
-            const totalPaid = cInvoices.reduce((s, i) => s + i.payments.reduce((ss, p) => ss + p.amount, 0), 0);
-            const remaining = totalPurchased - totalPaid;
-
-            return `
-                <tr>
-                    <td>${c.name}</td>
-                    <td>${totalPurchased.toFixed(2)}</td>
-                    <td>${totalPaid.toFixed(2)}</td>
-                    <td style="color:red; font-weight:bold">${remaining.toFixed(2)}</td>
-                    <td><button onclick="ui.openPaymentModal('${c.id}', '${c.name}')">تسجيل دفعة</button></td>
-                </tr>
-            `;
-        }).join('');
-    },
-
-    openPaymentModal(id, name) {
-        document.getElementById('pay-client-id').value = id;
-        document.getElementById('pay-client-name').innerText = name;
-        this.openModal('paymentModal');
-        
-        // عرض سجل الدفعات
-        const cInvoices = state.invoices.filter(i => i.clientId === id);
-        const allPayments = [];
-        cInvoices.forEach(inv => allPayments.push(...inv.payments));
-        
-        document.getElementById('payment-history-list').innerHTML = allPayments.map(p => `
-            <div style="font-size: 0.8rem; border-bottom: 1px solid #eee; padding: 5px;">
-                ${p.date} - ${p.time} : <strong>${p.amount} ج.م</strong>
-            </div>
-        `).sort().reverse().join('');
-    },
-
-    renderReports() {
-        const filterVal = document.getElementById('report-month-filter').value; // YYYY-MM
-        const filteredInvoices = state.invoices.filter(inv => inv.date.startsWith(filterVal));
-
-        const totalSales = filteredInvoices.reduce((s, i) => s + i.total, 0);
-        let totalPaid = 0;
-        filteredInvoices.forEach(inv => {
-            totalPaid += inv.payments.reduce((ss, p) => ss + p.amount, 0);
+    saveInvoice() {
+        const inv = {
+            id: Date.now(),
+            clientName: document.getElementById('sal_client').value,
+            items: [...this.tempItems],
+            total: this.tempItems.reduce((s, i) => s + (i.qty * i.price), 0),
+            date: new Date().toLocaleDateString()
+        };
+        // خصم المخزن
+        this.tempItems.forEach(it => {
+            const p = AppState.state.products.find(x => x.name === it.name);
+            p.qty -= it.qty;
         });
+        AppState.state.invoices.push(inv);
+        AppState.save(); UI.closeModal(); UI.renderTab('sales');
+    }
+};
 
-        document.getElementById('rep-total-sales').innerText = totalSales.toFixed(2);
-        document.getElementById('rep-total-paid').innerText = totalPaid.toFixed(2);
-        document.getElementById('rep-count').innerText = filteredInvoices.length;
+// 7. Expenses Module
+const Expenses = {
+    add(e) {
+        e.preventDefault();
+        AppState.state.expenses.push({
+            type: document.getElementById('ex_type').value,
+            amount: Number(document.getElementById('ex_amount').value),
+            date: document.getElementById('ex_date').value,
+            notes: document.getElementById('ex_notes').value
+        });
+        AppState.save(); UI.closeModal(); UI.renderTab('expenses');
+    }
+};
 
-        // الأكثر مبيعاً
-        const productCounts = {};
-        filteredInvoices.forEach(inv => {
-            inv.items.forEach(item => {
-                productCounts[item.name] = (productCounts[item.name] || 0) + item.qty;
+// 8. Reports Module (المحرك المالي)
+const Reports = {
+    getStats() {
+        const sales = AppState.state.invoices.reduce((s, n) => s + Number(n.total), 0);
+        const expenses = AppState.state.expenses.reduce((s, n) => s + Number(n.amount), 0);
+        
+        // حساب التكلفة الحقيقية للبضاعة المباعة لاستخراج الربح
+        let costOfGoodsSold = 0;
+        AppState.state.invoices.forEach(inv => {
+            inv.items.forEach(it => {
+                costOfGoodsSold += (it.qty * (it.buyPrice || 0));
             });
         });
 
-        const sorted = Object.entries(productCounts).sort((a,b) => b[1] - a[1]).slice(0, 5);
-        document.getElementById('rep-best-sellers').innerHTML = sorted.map(s => `<li>${s[0]} (${s[1]} قطعة)</li>`).join('');
-    },
+        const grossProfit = sales - costOfGoodsSold;
+        const netProfit = grossProfit - expenses;
 
-    renderDashboard() {
-        const totalSales = state.invoices.reduce((s, i) => s + i.total, 0);
-        let totalPaid = 0;
-        state.invoices.forEach(inv => totalPaid += inv.payments.reduce((ss, p) => ss + p.amount, 0));
-        
-        document.getElementById('dash-sales').innerText = totalSales.toFixed(2);
-        document.getElementById('dash-paid').innerText = totalPaid.toFixed(2);
-        document.getElementById('dash-debts').innerText = (totalSales - totalPaid).toFixed(2);
-    },
-
-renderInvoices() {
-    const body = document.getElementById('invoices-table-body');
-
-    body.innerHTML = state.invoices.map(inv => {
-        const client = state.clients.find(c => c.id === inv.clientId);
-
-        return `
-        <tr>
-            <td>${inv.id}</td>
-            <td>${client?.name || ''}</td>
-            <td>${new Date(inv.date).toLocaleDateString('ar-EG')}</td>
-            <td>${inv.total.toFixed(2)} ج.م</td>
-            <td>
-<td>
-    <button onclick="printInvoice('${inv.id}')">طباعة</button>
-    <button onclick="sendInvoice('${inv.id}')">إرسال</button>
-</td>
-
-            </td>
-        </tr>
-        `;
-    }).join('');
-},
-
-
-    openModal(id) { document.getElementById(id).style.display = 'block'; },
-    closeModal(id) { 
-        document.getElementById(id).style.display = 'none'; 
-        // مسح الحقول
-        const modal = document.getElementById(id);
-        modal.querySelectorAll('input').forEach(i => i.value = '');
+        return { sales, expenses, netProfit, grossProfit };
     }
 };
 
+// 9. UI Controller
+const UI = {
+    showModal(title, html) {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-body').innerHTML = html;
+        document.getElementById('modal-overlay').classList.remove('hidden');
+    },
+    closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); AppState.isDirty = false; },
+    
+    renderTab(tab) {
+        AppState.state.settings.lastTab = tab;
+        AppState.save();
+        const area = document.getElementById('content-area');
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        
+        switch(tab) {
+            case 'dashboard':
+                const s = Reports.getStats();
+                area.innerHTML = `
+                    <div class="stats-grid">
+                        <div class="stat-card"><h3>إجمالي المبيعات</h3><p>${s.sales} ج.م</p></div>
+                        <div class="stat-card" style="border-top-color:var(--danger)"><h3>إجمالي المصروفات</h3><p>${s.expenses} ج.م</p></div>
+                        <div class="stat-card" style="border-top-color:var(--accent)"><h3>صافي الربح</h3><p>${s.netProfit} ج.م</p></div>
+                    </div>
+                    <h3>⚠️ نواقص المخزن</h3>
+                    <table>
+                        <thead><tr><th>المنتج</th><th>الكمية الحالية</th><th>حد التنبيه</th></tr></thead>
+                        <tbody>
+                            ${AppState.state.products.filter(p => p.qty <= p.minQty).map(p => 
+                                `<tr><td>${p.name}</td><td style="color:red"><b>${p.qty}</b></td><td>${p.minQty}</td></tr>`).join('')}
+                        </tbody>
+                    </table>`;
+                break;
+            case 'products':
+                area.innerHTML = `
+                    <button class="btn btn-primary" onclick="UI.showProductForm()">+ إضافة منتج يدوي</button>
+                    <table>
+                        <thead><tr><th>المنتج</th><th>التصنيف</th><th>سعر الشراء</th><th>سعر البيع</th><th>الكمية</th></tr></thead>
+                        <tbody>
+                            ${AppState.state.products.map(p => `<tr><td>${p.name}</td><td>${p.category}</td><td>${p.buyPrice}</td><td>${p.sellPrice}</td><td>${p.qty}</td></tr>`).join('')}
+                        </tbody>
+                    </table>`;
+                break;
+            case 'suppliers': area.innerHTML = Suppliers.renderList(); break;
+            case 'purchases': 
+                area.innerHTML = `
+                <button class="btn btn-primary" onclick="Purchases.showForm()">+ تسجيل فاتورة شراء</button>
+                <table>
+                    <thead><tr><th>التاريخ</th><th>المورد</th><th>الإجمالي</th><th>بنود</th></tr></thead>
+                    <tbody>
+                        ${AppState.state.purchases.map(p => `<tr><td>${p.date}</td><td>${p.supplier}</td><td>${p.total}</td><td>${p.items.length} أصناف</td></tr>`).join('')}
+                    </tbody>
+                </table>`;
+                break;
+            case 'sales':
+                area.innerHTML = `
+                <button class="btn btn-primary" onclick="Sales.showForm()">+ فاتورة بيع جديدة</button>
+                <table>
+                    <thead><tr><th>التاريخ</th><th>العميل</th><th>الإجمالي</th></tr></thead>
+                    <tbody>
+                        ${AppState.state.invoices.map(inv => `<tr><td>${inv.date}</td><td>${inv.clientName}</td><td>${inv.total}</td></tr>`).join('')}
+                    </tbody>
+                </table>`;
+                break;
+            case 'clients':
+                area.innerHTML = `
+                <button class="btn btn-primary" onclick="UI.showClientForm()">+ إضافة عميل</button>
+                <table>
+                    <thead><tr><th>الاسم</th><th>الهاتف</th></tr></thead>
+                    <tbody>
+                        ${AppState.state.clients.map(c => `<tr><td>${c.name}</td><td>${c.phone}</td></tr>`).join('')}
+                    </tbody>
+                </table>`;
+                break;
+            case 'expenses':
+                area.innerHTML = `
+                <button class="btn btn-primary" onclick="UI.showExpenseForm()">+ تسجيل مصروف</button>
+                <table>
+                    <thead><tr><th>التاريخ</th><th>النوع</th><th>المبلغ</th><th>ملاحظات</th></tr></thead>
+                    <tbody>
+                        ${AppState.state.expenses.map(ex => `<tr><td>${ex.date}</td><td>${ex.type}</td><td>${ex.amount}</td><td>${ex.notes}</td></tr>`).join('')}
+                    </tbody>
+                </table>`;
+                break;
+            case 'reports':
+                const r = Reports.getStats();
+                area.innerHTML = `
+                    <div class="stat-card" style="max-width:400px">
+                        <h3>ملخص مالي شامل</h3>
+                        <hr>
+                        <p>إجمالي المبيعات: ${r.sales}</p>
+                        <p>تكلفة البضاعة: ${r.sales - r.grossProfit}</p>
+                        <p style="color:var(--accent)">إجمالي الربح (قبل المصاريف): ${r.grossProfit}</p>
+                        <p style="color:var(--danger)">إجمالي المصروفات: ${r.expenses}</p>
+                        <hr>
+                        <h2 style="color:var(--primary)">الربح الصافي: ${r.netProfit} ج.م</h2>
+                    </div>`;
+                break;
+            case 'settings':
+                area.innerHTML = `
+                    <h3>إدارة البيانات</h3>
+                    <button class="btn btn-primary" onclick="Storage.export(AppState.state)">تصدير نسخة احتياطية (JSON)</button>
+                    <p>استيراد بيانات:</p>
+                    <input type="file" onchange="UI.importData(event)">
+                `;
+                break;
+        }
+    },
 
+    showProductForm() {
+        UI.showModal("إضافة منتج", `<form onsubmit="UI.handleProduct(event)">
+            <div class="form-group"><label>الاسم</label><input id="p_name" required></div>
+            <div class="form-group"><label>سعر الشراء</label><input type="number" id="p_buy" required></div>
+            <div class="form-group"><label>سعر البيع</label><input type="number" id="p_sell" required></div>
+            <div class="form-group"><label>الكمية</label><input type="number" id="p_qty" required></div>
+            <button class="btn btn-primary">حفظ</button>
+        </form>`);
+    },
+    handleProduct(e) {
+        e.preventDefault();
+        Products.add({
+            name: document.getElementById('p_name').value,
+            category: 'عام',
+            buyPrice: Number(document.getElementById('p_buy').value),
+            sellPrice: Number(document.getElementById('p_sell').value),
+            qty: Number(document.getElementById('p_qty').value),
+            minQty: 5
+        });
+        UI.closeModal(); UI.renderTab('products');
+    },
 
+    showExpenseForm() {
+        UI.showModal("تسجيل مصروف", `<form onsubmit="Expenses.add(event)">
+            <div class="form-group"><label>النوع</label><input id="ex_type" placeholder="مثلاً: إيجار، كهرباء" required></div>
+            <div class="form-group"><label>المبلغ</label><input type="number" id="ex_amount" required></div>
+            <div class="form-group"><label>التاريخ</label><input type="date" id="ex_date" value="${new Date().toISOString().split('T')[0]}"></div>
+            <div class="form-group"><label>ملاحظات</label><textarea id="ex_notes"></textarea></div>
+            <button class="btn btn-primary">حفظ المصروف</button>
+        </form>`);
+    },
 
+    showClientForm() {
+        UI.showModal("إضافة عميل", `<form onsubmit="UI.handleClient(event)">
+            <div class="form-group"><label>الاسم</label><input id="cl_name" required></div>
+            <div class="form-group"><label>الهاتف</label><input id="cl_phone"></div>
+            <button class="btn btn-primary">حفظ</button>
+        </form>`);
+    },
+    handleClient(e) {
+        e.preventDefault();
+        AppState.state.clients.push({name: document.getElementById('cl_name').value, phone: document.getElementById('cl_phone').value});
+        AppState.save(); UI.closeModal(); UI.renderTab('clients');
+    },
 
-
-
-function sendInvoice(invoiceId) {
-    const invoice = state.invoices.find(inv => inv.id === invoiceId);
-    if (!invoice) return alert("الفاتورة غير موجودة");
-
-    const client = state.clients.find(c => c.id === invoice.clientId);
-    if (!client || !client.phone) {
-        return alert("لا يوجد رقم واتساب لهذا العميل");
+    importData(e) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            AppState.state = JSON.parse(event.target.result);
+            AppState.save(); location.reload();
+        };
+        reader.readAsText(e.target.files[0]);
     }
+};
 
-    const paid = invoice.payments.reduce((s, p) => s + p.amount, 0);
-    const remaining = invoice.total - paid;
-
-let message = `
- فاتورة بيع رسمية
-
- الحاج محمد عبدالعاطي وأولاده
-   01203089081
-━━━━━━━━━━━━━━━━━━
-
-  اسم العميل:  ${client.name}
-  التاريخ:  ${new Date(invoice.date).toLocaleDateString('ar-EG')}
-
-  تفاصيل الأصناف: 
-`;
-
-invoice.items.forEach((i, index) => {
-    message += `
-${index + 1}- ${i.name}
-   • الكمية: ${i.qty}
-   • السعر: ${i.price} ج.م
-   • الإجمالي: ${i.total} ج.م
-`;
+// 10. Initialization & Guards
+document.addEventListener('DOMContentLoaded', () => {
+    AppState.init();
+    UI.renderTab(AppState.state.settings.lastTab || 'dashboard');
+    
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => UI.renderTab(btn.dataset.tab));
+    });
 });
 
-message += `
-━━━━━━━━━━━━━━━━━━
-  ملخص الحساب: 
-• إجمالي الفاتورة: ${invoice.total} ج.م
-• المبلغ المدفوع: ${paid} ج.م
-• المبلغ المتبقي: ${remaining} ج.م
-
-━━━━━━━━━━━━━━━━━━
- نشكركم على التعامل معنا
- في انتظار خدمتكم دائمًا
-`;
-
-
-    const phone = client.phone.replace(/\D/g, '');
-    const url = `https://wa.me/20${phone}?text=${encodeURIComponent(message)}`;
-
-    window.open(url, '_blank');
-}
-
-
-
-
-// تشغيل النظام
-app.init();
+window.addEventListener('beforeunload', (e) => {
+    if (AppState.isDirty) {
+        e.preventDefault();
+        e.returnValue = 'تنبيه: هناك فاتورة لم يتم حفظها، هل تريد الخروج؟';
+    }
+});
